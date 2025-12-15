@@ -3,6 +3,7 @@ const app = express();
 const cors = require("cors");
 require("dotenv").config();
 const admin = require("firebase-admin");
+const stripe = require('stripe')(process.env.STRIPE_SECRET);
 const serviceAccount = require("./public-infrastructure-issue.json");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const port = process.env.PORT || 3000;
@@ -53,12 +54,20 @@ async function run() {
 
     // reports related api
 app.get("/reports", async (req, res) => {
+  const searchText =req.query.searchText;
   const query = {};
+  if(searchText){
+    query.$or =[
+      {title:{$regex: searchText,$options:'i'}},
+      {category:{$regex: searchText,$options:'i'}},
+      {location:{$regex: searchText,$options:'i'}},
+    ]
+  }
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 9;
   const skip = (page - 1) * limit;
 
-  const totalReports = await reportCollection.countDocuments();
+  const totalReports = await reportCollection.countDocuments(query);
   const result = await reportCollection
     .find(query)
     .sort({ priority: 1})
@@ -98,7 +107,7 @@ app.get("/reports", async (req, res) => {
       if(report.email === userEmail){
         return res.status(403).send({message:"Cannot upvote your own issue"})
       }
-      if (report.upvotedBy?.includes(userEmail)){
+      if (report.upVotedBy?.includes(userEmail)){
         return res.status(400).send({ message: "Already upvoted" });
       }
       const updateDoc={
@@ -139,6 +148,70 @@ app.get("/reports", async (req, res) => {
       const result = await reportCollection.deleteOne(query);
       res.send(result);
     });
+
+    // payment related api 
+
+app.post('/create-checkout-session', async (req, res) => {
+  const paymentInfo = req.body;
+  const session = await stripe.checkout.sessions.create({
+    line_items: [
+      {
+        price_data:{
+          currency:'bdt',
+          product_data: {
+            name: "Boost Issue",
+            description: "Boost this issue to high priority",
+          },
+          unit_amount:10000
+        },
+        quantity: 1,
+      },
+    ],
+    mode: 'payment',
+    metadata:{
+      reportId:paymentInfo.reportId
+    },
+    customer_email:paymentInfo.email,
+    success_url: `${process.env.SITE_DOMAIN}/view-details/${paymentInfo.reportId}?session_id={CHECKOUT_SESSION_ID}`,
+    // success_url: `${process.env.SITE_DOMAIN}/all-issue?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${process.env.SITE_DOMAIN}`,
+  });
+
+  res.send({url:session.url})
+});
+
+
+
+
+app.post('/confirm-boost', async (req, res) => {
+  const { sessionId } = req.body;
+
+  const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+  if (session.payment_status !== "paid") {
+    return res.status(400).send({ message: "Payment not completed" });
+  }
+
+  const reportId = session.metadata.reportId;
+
+  await reportCollection.updateOne(
+    { _id: new ObjectId(reportId) },
+    {
+      $set: { priority: "high" },
+      $push: {
+        timeline: {
+          action: "Boosted",
+          message: "Issue boosted after successful payment (100tk)",
+          date: new Date()
+        }
+      }
+    }
+  );
+  // console.log('after retrieve')
+  res.send({ success: true });
+});
+
+
 
     await client.db("admin").command({ ping: 1 });
     console.log(
