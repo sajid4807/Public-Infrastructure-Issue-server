@@ -132,39 +132,45 @@ app.patch("/staff/:id", verifyFBToken, verifyAdmin, async (req, res) => {
 
   res.send({totalIssues,pending,resolved,rejected});
 });
-   
-app.patch("/reports/:id/assign-staff",
-  verifyFBToken,
-  verifyAdmin,
-  async (req, res) => {
 
-    const { staffEmail } = req.body;
-    const id = req.params.id;
+app.patch('/reports/:id/staff',verifyFBToken,verifyAdmin, async (req, res) => {
+  const { name, email, staffId } = req.body;
+  const reportId = req.params.id;
 
-    const report = await reportCollection.findOne({ _id: new ObjectId(id) });
+  const report = await reportCollection.findOne({ _id: new ObjectId(reportId) });
+  if (!report) return res.status(404).send({ message: "Report not found" });
+  if (report.staffId) return res.status(400).send({ message: "Staff already assigned" });
 
-    if (report.assignedStaff) {
-      return res.status(400).send({ message: "Staff already assigned" });
+  const updateReportDoc = {
+    $set: {
+      staffId,      
+      staffName: name,
+      staffEmail: email,
+      // timelineDate: new Date()
     }
+  };
 
-    const updateDoc = {
-      $set: { assignedStaff: staffEmail },
-      $push: {
-        timeline: {
-          action: "Assigned",
-          message: `Staff ${staffEmail} assigned`,
-          date: new Date(),
-        },
-      },
-    };
+  await reportCollection.updateOne(
+    { _id: new ObjectId(reportId) },
+    updateReportDoc
+  );
 
-    await reportCollection.updateOne(
-      { _id: new ObjectId(id) },
-      updateDoc
-    );
+  const staffUpdateDoc = {
+    $set: {
+      issueId: report._id,
+      issueTitle: report.title,
+      assignedDate: new Date()
+    }
+  };
 
-    res.send({ success: true });
+  const staffResult = await userCollection.updateOne(
+    { _id: new ObjectId(staffId) },
+    staffUpdateDoc
+  );
+
+  res.send({ success: true, staffResult });
 });
+
 
 app.patch("/reports/:id/reject",
   verifyFBToken,
@@ -206,50 +212,95 @@ app.delete('/staff/:id',verifyFBToken,verifyAdmin, async(req,res)=>{
 
 
     // reports related api
+// app.get("/reports", async (req, res) => {
+//   // const {searchText } =req.query.searchText;
+//   const {searchText } =req.query;
+//   const query = {};
+//   if(searchText){
+//     query.$or =[
+//       {title:{$regex: searchText,$options:'i'}},
+//       {category:{$regex: searchText,$options:'i'}},
+//       {location:{$regex: searchText,$options:'i'}},
+//     ]
+//   }
+//   // implement later 
+//   // if(filter){
+//   //   query.$or =[
+//   //     {status:{$regex: filter,$options:'i'}},
+//   //     {priority:{$regex: filter,$options:'i'}},
+//   //     {category:{$regex: filter,$options:'i'}},
+//   //   ]
+//   // }
+
+
+//   // if(status){
+//   //   query.status = status.toLowerCase()
+//   // }
+//   // if(priority){
+//   //   query.priority = priority.toLowerCase()
+//   // }
+//   // if(category){
+//   //   query.category = category.toLowerCase()
+//   // }
+
+//   const page = parseInt(req.query.page) || 1;
+//   const limit = parseInt(req.query.limit) || 9;
+//   const skip = (page - 1) * limit;
+
+//   const totalReports = await reportCollection.countDocuments(query);
+//   const result = await reportCollection
+//     .find(query)
+//     .sort({ priority: 1})
+//     .skip(skip)
+//     .limit(limit)
+//     .toArray();
+//   res.send({ result, totalReports });
+// });
+
+
 app.get("/reports", async (req, res) => {
-  // const {searchText } =req.query.searchText;
-  const {searchText } =req.query;
+  const { searchText, filter } = req.query; // filter optional
   const query = {};
-  if(searchText){
-    query.$or =[
-      {title:{$regex: searchText,$options:'i'}},
-      {category:{$regex: searchText,$options:'i'}},
-      {location:{$regex: searchText,$options:'i'}},
-    ]
+
+  // 🔍 Search by title, category, location
+  if (searchText) {
+    query.$or = [
+      { title: { $regex: searchText, $options: "i" } },
+      { category: { $regex: searchText, $options: "i" } },
+      { location: { $regex: searchText, $options: "i" } },
+    ];
   }
-  // implement later 
-  // if(filter){
-  //   query.$or =[
-  //     {status:{$regex: filter,$options:'i'}},
-  //     {priority:{$regex: filter,$options:'i'}},
-  //     {category:{$regex: filter,$options:'i'}},
-  //   ]
-  // }
 
+  // ⚙️ Optional filter by status, priority, category
+  if (filter) {
+    query.$or = query.$or || [];
+    query.$or.push(
+      { status: { $regex: filter, $options: "i" } },
+      { priority: { $regex: filter, $options: "i" } },
+      { category: { $regex: filter, $options: "i" } }
+    );
+  }
 
-  // if(status){
-  //   query.status = status.toLowerCase()
-  // }
-  // if(priority){
-  //   query.priority = priority.toLowerCase()
-  // }
-  // if(category){
-  //   query.category = category.toLowerCase()
-  // }
-
+  // Pagination
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 9;
   const skip = (page - 1) * limit;
 
-  const totalReports = await reportCollection.countDocuments(query);
-  const result = await reportCollection
-    .find(query)
-    .sort({ priority: 1})
-    .skip(skip)
-    .limit(limit)
-    .toArray();
-  res.send({ result, totalReports });
+  // 🔝 Sorting: Boosted first, then priority (higher first), then latest created
+  const sortQuery = { isBoosted: -1, priority: 1, createdAt: -1 };
+
+
+    const totalReports = await reportCollection.countDocuments(query);
+    const result = await reportCollection
+      .find(query)
+      .sort(sortQuery)
+      .skip(skip)
+      .limit(limit)
+      .toArray();
+
+    res.send({ result, totalReports });
 });
+
 
 
     app.get("/reports/:id", async (req, res) => {
