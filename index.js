@@ -80,6 +80,30 @@ async function run() {
       res.send(result)
     })
 
+    // staff related api 
+    
+
+    
+
+app.post('/staff', async (req, res) => {
+  
+    const staff = req.body;
+    staff.role = "staff";
+    staff.createdAt = new Date();
+    staff.status = "active";
+    const email = staff.email;
+    // Check existing staff
+    const existingStaff = await userCollection.findOne({ email });
+    if (existingStaff) {
+      return res.send({ message: "Staff already exists" });
+    }
+
+    const result = await userCollection.insertOne(staff);
+    res.send(result);
+
+});
+
+
 
 // admin related api
     app.get("/admin/stats", verifyFBToken, verifyAdmin, async (req, res) => {
