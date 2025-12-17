@@ -79,7 +79,20 @@ async function run() {
       const result = await userCollection.insertOne(user)
       res.send(result)
     })
+// admin related api
+    app.get("/admin/stats", verifyFBToken, verifyAdmin, async (req, res) => {
+  const totalIssues = await reportCollection.countDocuments();
+  const pending = await reportCollection.countDocuments({ status: "pending" });
+  const resolved = await reportCollection.countDocuments({ status: "resolved" });
+  const rejected = await reportCollection.countDocuments({ status: "rejected" });
 
+  res.send({
+    totalIssues,
+    pending,
+    resolved,
+    rejected,
+  });
+});
    
 
     // reports related api
