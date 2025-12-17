@@ -124,6 +124,30 @@ app.patch("/reports/:id/assign-staff",
     res.send({ success: true });
 });
 
+app.patch("/reports/:id/reject",
+  verifyFBToken,
+  verifyAdmin,
+  async (req, res) => {
+
+    const id = req.params.id;
+
+    await reportCollection.updateOne(
+      { _id: new ObjectId(id), status: "pending" },
+      {
+        $set: { status: "rejected" },
+        $push: {
+          timeline: {
+            action: "Rejected",
+            message: "Issue rejected by admin",
+            date: new Date(),
+          },
+        },
+      }
+    );
+
+    res.send({ success: true });
+});
+
 
     // reports related api
 app.get("/reports", async (req, res) => {
