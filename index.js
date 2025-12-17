@@ -66,6 +66,36 @@ async function run() {
 
 
     // users related api
+
+    app.get('/users', verifyFBToken,verifyAdmin, async (req, res) => {
+  const result = await userCollection
+    .find({ role: "staff" })
+    .toArray();
+
+  res.send(result);
+});
+
+// only staff user api 
+
+//     app.get('/staff',verifyFBToken,verifyAdmin, async (req, res) => {
+      
+
+//   const result = await userCollection
+//     .find({ role: "staff" })
+//     .toArray();
+
+//   res.send(result);
+// });
+
+
+// all user api 
+
+
+//     app.get('/users', async (req, res) => {
+//   const result = await userCollection.find().toArray();
+//   res.send(result);
+// });
+
     app.post('/users',async(req,res)=>{
       const user = req.body;
       user.role = "user";
@@ -79,31 +109,19 @@ async function run() {
       const result = await userCollection.insertOne(user)
       res.send(result)
     })
-
     // staff related api 
-    
 
-    
-
-app.post('/staff', async (req, res) => {
-  
-    const staff = req.body;
-    staff.role = "staff";
-    staff.createdAt = new Date();
-    staff.status = "active";
-    const email = staff.email;
-    // Check existing staff
-    const existingStaff = await userCollection.findOne({ email });
-    if (existingStaff) {
-      return res.send({ message: "Staff already exists" });
-    }
-
-    const result = await userCollection.insertOne(staff);
-    res.send(result);
-
+app.patch("/staff/:id", verifyFBToken, verifyAdmin, async (req, res) => {
+  const id = req.params.id;
+  const updateStaff =req.body;
+  const query={_id: new ObjectId(id)}
+  const updateDoc ={
+    $set:updateStaff,
+    $currentDate: {updatedAt:true},
+  }
+  const result =await userCollection.updateOne(query,updateDoc)
+  res.send(result)
 });
-
-
 
 // admin related api
     app.get("/admin/stats", verifyFBToken, verifyAdmin, async (req, res) => {
@@ -171,6 +189,20 @@ app.patch("/reports/:id/reject",
 
     res.send({ success: true });
 });
+
+app.delete('/staff/:id',verifyFBToken,verifyAdmin, async(req,res)=>{
+  const id =req.params.id;
+  const query={_id: new ObjectId(id)}
+  const staff = await userCollection.findOne(query)
+  if(!staff){
+    return res.status(404).send({ message: "Staff not found" });
+  }
+  if(staff.role !== 'staff'){
+    return res.status(403).send({message:'You can only delete staff'})
+  }
+  const result = await userCollection.deleteOne(query)
+  res.send(result)
+})
 
 
     // reports related api
@@ -263,7 +295,7 @@ app.get("/reports", async (req, res) => {
 
 
 
-    app.post("/reports", async (req, res) => {
+    app.post("/reports",verifyFBToken, async (req, res) => {
       const report = req.body;
       const result = await reportCollection.insertOne(report);
       res.send(result);
