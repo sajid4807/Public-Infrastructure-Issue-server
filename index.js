@@ -51,10 +51,40 @@ async function run() {
 
     const db = client.db("Public_Infrastructure");
     const reportCollection = db.collection("reports");
+    const userCollection = db.collection("users");
+
+    
+    // more middleware database access
+    const verifyAdmin = async (req, res, next) => {
+  const email = req.decoded_email;
+  const user = await userCollection.findOne({ email });
+  if (!user || user.role !== "admin") {
+    return res.status(403).send({ message: "admin access only" });
+  }
+  next();
+};
+
+
+    // users related api
+    app.post('/users',async(req,res)=>{
+      const user = req.body;
+      user.role = "user";
+      user.createdAt = new Date()
+      const email = user.email;
+
+      const userExits = await userCollection.findOne({ email });
+      if (userExits) {
+        return res.send({ message: "already exists" });
+      }
+      const result = await userCollection.insertOne(user)
+      res.send(result)
+    })
+
+   
 
     // reports related api
 app.get("/reports", async (req, res) => {
-  const searchText =req.query.searchText;
+  const {searchText } =req.query.searchText;
   const query = {};
   if(searchText){
     query.$or =[
@@ -63,6 +93,26 @@ app.get("/reports", async (req, res) => {
       {location:{$regex: searchText,$options:'i'}},
     ]
   }
+  // implement later 
+  // if(filter){
+  //   query.$or =[
+  //     {status:{$regex: filter,$options:'i'}},
+  //     {priority:{$regex: filter,$options:'i'}},
+  //     {category:{$regex: filter,$options:'i'}},
+  //   ]
+  // }
+
+
+  // if(status){
+  //   query.status = status.toLowerCase()
+  // }
+  // if(priority){
+  //   query.priority = priority.toLowerCase()
+  // }
+  // if(category){
+  //   query.category = category.toLowerCase()
+  // }
+
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 9;
   const skip = (page - 1) * limit;
