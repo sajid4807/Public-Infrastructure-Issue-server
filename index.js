@@ -79,6 +79,8 @@ async function run() {
       const result = await userCollection.insertOne(user)
       res.send(result)
     })
+
+
 // admin related api
     app.get("/admin/stats", verifyFBToken, verifyAdmin, async (req, res) => {
   const totalIssues = await reportCollection.countDocuments();
@@ -86,18 +88,47 @@ async function run() {
   const resolved = await reportCollection.countDocuments({ status: "resolved" });
   const rejected = await reportCollection.countDocuments({ status: "rejected" });
 
-  res.send({
-    totalIssues,
-    pending,
-    resolved,
-    rejected,
-  });
+  res.send({totalIssues,pending,resolved,rejected});
 });
    
+app.patch("/reports/:id/assign-staff",
+  verifyFBToken,
+  verifyAdmin,
+  async (req, res) => {
+
+    const { staffEmail } = req.body;
+    const id = req.params.id;
+
+    const report = await reportCollection.findOne({ _id: new ObjectId(id) });
+
+    if (report.assignedStaff) {
+      return res.status(400).send({ message: "Staff already assigned" });
+    }
+
+    const updateDoc = {
+      $set: { assignedStaff: staffEmail },
+      $push: {
+        timeline: {
+          action: "Assigned",
+          message: `Staff ${staffEmail} assigned`,
+          date: new Date(),
+        },
+      },
+    };
+
+    await reportCollection.updateOne(
+      { _id: new ObjectId(id) },
+      updateDoc
+    );
+
+    res.send({ success: true });
+});
+
 
     // reports related api
 app.get("/reports", async (req, res) => {
-  const {searchText } =req.query.searchText;
+  // const {searchText } =req.query.searchText;
+  const {searchText } =req.query;
   const query = {};
   if(searchText){
     query.$or =[
