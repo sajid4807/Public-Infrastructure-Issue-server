@@ -65,9 +65,56 @@ async function run() {
 };
 
 
+// when i delete this part must read 
+
+// const checkBlockedUser = async (req, res, next) => {
+//   const email = req.decoded.email;
+
+//   const user = await usersCollection.findOne({ email });
+
+//   if (user?.isBlocked) {
+//     return res.status(403).send({
+//       message: "You are blocked. Contact authority."
+//     });
+//   }
+
+//   next();
+// };
+
+
+
     // users related api
 
-    app.get('/users', verifyFBToken,verifyAdmin, async (req, res) => {
+    app.get('/users', async (req, res) => {
+  const result = await userCollection.find({ role: "user" }).sort({createdAt : -1}).toArray();
+  res.send(result);
+});
+
+
+// block user api
+
+app.patch('/users/block/:id',verifyFBToken,verifyAdmin, async (req,res)=>{
+  const id = req.params.id;
+  const query ={_id: new ObjectId(id)}
+  const updateDoc ={
+ $set: { isBlocked: true } 
+  }
+  const result = await userCollection.updateOne(query,updateDoc)
+  res.send(result)
+})
+
+app.patch('/users/unblock/:id',verifyFBToken,verifyAdmin, async (req,res)=>{
+  const id = req.params.id;
+  const query ={_id: new ObjectId(id)}
+  const updateDoc ={
+ $set: { isBlocked: false } 
+  }
+  const result = await userCollection.updateOne(query,updateDoc)
+  res.send(result)
+})
+
+// staff related api
+    app.get('/staff', verifyFBToken,verifyAdmin, async (req, res) => {
   const result = await userCollection
     .find({ role: "staff" })
     .toArray();
@@ -301,6 +348,10 @@ app.get("/reports", async (req, res) => {
     res.send({ result, totalReports });
 });
 
+app.get("/reports/admin", async (req, res) => {
+  const result = await reportCollection.find().sort({priority: 1}).toArray();
+  res.send(result);
+});
 
 
     app.get("/reports/:id", async (req, res) => {
