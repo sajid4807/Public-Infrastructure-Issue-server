@@ -1,3 +1,4 @@
 node_modules
 .env
 public-infrastructure-issue.json
+.vercel
